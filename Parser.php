@@ -44,12 +44,13 @@ class Parser
      * @param string  $value                  A YAML string
      * @param Boolean $exceptionOnInvalidType true if an exception must be thrown on invalid types (a PHP resource or object), false otherwise
      * @param Boolean $objectSupport          true if object support is enabled, false otherwise
+     * @param Boolean $objectForMap           true if maps should return a stdClass instead of array()
      *
      * @return mixed  A PHP value
      *
      * @throws ParseException If the YAML is not valid
      */
-    public function parse($value, $exceptionOnInvalidType = false, $objectSupport = false)
+    public function parse($value, $exceptionOnInvalidType = false, $objectSupport = false, $objectForMap = false)
     {
         $this->currentLineNb = -1;
         $this->currentLine = '';
@@ -93,7 +94,7 @@ class Parser
                     $c = $this->getRealCurrentLineNb() + 1;
                     $parser = new Parser($c);
                     $parser->refs =& $this->refs;
-                    $data[] = $parser->parse($this->getNextEmbedBlock(), $exceptionOnInvalidType, $objectSupport);
+                    $data[] = $parser->parse($this->getNextEmbedBlock(), $exceptionOnInvalidType, $objectSupport, $objectForMap);
                 } else {
                     if (isset($values['leadspaces'])
                         && ' ' == $values['leadspaces']
@@ -109,9 +110,9 @@ class Parser
                             $block .= "\n".$this->getNextEmbedBlock($this->getCurrentLineIndentation() + 2);
                         }
 
-                        $data[] = $parser->parse($block, $exceptionOnInvalidType, $objectSupport);
+                        $data[] = $parser->parse($block, $exceptionOnInvalidType, $objectSupport, $objectForMap);
                     } else {
-                        $data[] = $this->parseValue($values['value'], $exceptionOnInvalidType, $objectSupport);
+                        $data[] = $this->parseValue($values['value'], $exceptionOnInvalidType, $objectSupport, $objectForMap);
                     }
                 }
             } elseif (preg_match('#^(?P<key>'.Inline::REGEX_QUOTED_STRING.'|[^ \'"\[\{].*?) *\:(\s+(?P<value>.+?))?\s*$#u', $this->currentLine, $values) && false === strpos($values['key'],' #')) {
@@ -121,7 +122,7 @@ class Parser
                 $context = 'mapping';
 
                 // force correct settings
-                Inline::parse(null, $exceptionOnInvalidType, $objectSupport);
+                Inline::parse(null, $exceptionOnInvalidType, $objectSupport, $objectForMap);
                 try {
                     $key = Inline::parseScalar($values['key']);
                 } catch (ParseException $e) {
@@ -146,7 +147,7 @@ class Parser
                         $c = $this->getRealCurrentLineNb() + 1;
                         $parser = new Parser($c);
                         $parser->refs =& $this->refs;
-                        $parsed = $parser->parse($value, $exceptionOnInvalidType, $objectSupport);
+                        $parsed = $parser->parse($value, $exceptionOnInvalidType, $objectSupport, $objectForMap);
 
                         $merged = array();
                         if (!is_array($parsed)) {
@@ -183,13 +184,13 @@ class Parser
                         $c = $this->getRealCurrentLineNb() + 1;
                         $parser = new Parser($c);
                         $parser->refs =& $this->refs;
-                        $data[$key] = $parser->parse($this->getNextEmbedBlock(), $exceptionOnInvalidType, $objectSupport);
+                        $data[$key] = $parser->parse($this->getNextEmbedBlock(), $exceptionOnInvalidType, $objectSupport, $objectForMap);
                     }
                 } else {
                     if ($isInPlace) {
                         $data = $this->refs[$isInPlace];
                     } else {
-                        $data[$key] = $this->parseValue($values['value'], $exceptionOnInvalidType, $objectSupport);
+                        $data[$key] = $this->parseValue($values['value'], $exceptionOnInvalidType, $objectSupport, $objectForMap);
                     }
                 }
             } else {
@@ -197,7 +198,7 @@ class Parser
                 $lineCount = count($this->lines);
                 if (1 === $lineCount || (2 === $lineCount && empty($this->lines[1]))) {
                     try {
-                        $value = Inline::parse($this->lines[0], $exceptionOnInvalidType, $objectSupport);
+                        $value = Inline::parse($this->lines[0], $exceptionOnInvalidType, $objectSupport, $objectForMap);
                     } catch (ParseException $e) {
                         $e->setParsedLine($this->getRealCurrentLineNb() + 1);
                         $e->setSnippet($this->currentLine);
@@ -376,12 +377,13 @@ class Parser
      * @param string  $value                  A YAML value
      * @param Boolean $exceptionOnInvalidType True if an exception must be thrown on invalid types false otherwise
      * @param Boolean $objectSupport          True if object support is enabled, false otherwise
+     * @param Boolean $objectForMap           true if maps should return a stdClass instead of array()
      *
      * @return mixed  A PHP value
      *
      * @throws ParseException When reference does not exist
      */
-    private function parseValue($value, $exceptionOnInvalidType, $objectSupport)
+    private function parseValue($value, $exceptionOnInvalidType, $objectSupport, $objectForMap = false)
     {
         if (0 === strpos($value, '*')) {
             if (false !== $pos = strpos($value, '#')) {
@@ -404,7 +406,7 @@ class Parser
         }
 
         try {
-            return Inline::parse($value, $exceptionOnInvalidType, $objectSupport);
+            return Inline::parse($value, $exceptionOnInvalidType, $objectSupport, $objectForMap);
         } catch (ParseException $e) {
             $e->setParsedLine($this->getRealCurrentLineNb() + 1);
             $e->setSnippet($this->currentLine);

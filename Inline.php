@@ -32,12 +32,13 @@ class Inline
      * @param string  $value                  A YAML string
      * @param Boolean $exceptionOnInvalidType true if an exception must be thrown on invalid types (a PHP resource or object), false otherwise
      * @param Boolean $objectSupport          true if object support is enabled, false otherwise
+     * @param Boolean $objectForMap           true if maps should return a stdClass instead of array()
      *
      * @return array A PHP array representing the YAML string
      *
      * @throws ParseException
      */
-    public static function parse($value, $exceptionOnInvalidType = false, $objectSupport = false)
+    public static function parse($value, $exceptionOnInvalidType = false, $objectSupport = false, $objectForMap = false)
     {
         self::$exceptionOnInvalidType = $exceptionOnInvalidType;
         self::$objectSupport = $objectSupport;
@@ -56,11 +57,11 @@ class Inline
         $i = 0;
         switch ($value[0]) {
             case '[':
-                $result = self::parseSequence($value, $i);
+                $result = self::parseSequence($value, $i, $objectForMap);
                 ++$i;
                 break;
             case '{':
-                $result = self::parseMapping($value, $i);
+                $result = self::parseMapping($value, $i, $objectForMap);
                 ++$i;
                 break;
             default:
@@ -261,14 +262,14 @@ class Inline
     /**
      * Parses a sequence to a YAML string.
      *
-     * @param string $sequence
+     * @param string  $sequence
      * @param integer &$i
+     * @param Boolean $objectForMap true if maps should return a stdClass instead of array()
      *
+     * @return array
      * @return string A YAML string
-     *
-     * @throws ParseException When malformed inline YAML string is parsed
      */
-    private static function parseSequence($sequence, &$i = 0)
+    private static function parseSequence($sequence, &$i = 0, $objectForMap = false)
     {
         $output = array();
         $len = strlen($sequence);
@@ -279,11 +280,11 @@ class Inline
             switch ($sequence[$i]) {
                 case '[':
                     // nested sequence
-                    $output[] = self::parseSequence($sequence, $i);
+                    $output[] = self::parseSequence($sequence, $i, $objectForMap);
                     break;
                 case '{':
                     // nested mapping
-                    $output[] = self::parseMapping($sequence, $i);
+                    $output[] = self::parseMapping($sequence, $i, $objectForMap);
                     break;
                 case ']':
                     return $output;
@@ -297,7 +298,7 @@ class Inline
                     if (!$isQuoted && false !== strpos($value, ': ')) {
                         // embedded mapping?
                         try {
-                            $value = self::parseMapping('{'.$value.'}');
+                            $value = self::parseMapping('{'.$value.'}', $j = 0, $objectForMap);
                         } catch (\InvalidArgumentException $e) {
                             // no, it's not
                         }
@@ -319,12 +320,13 @@ class Inline
      *
      * @param string $mapping
      * @param integer &$i
+     * @param Boolean $objectForMap    true if maps should return a stdClass instead of array()
      *
      * @return string A YAML string
      *
      * @throws ParseException When malformed inline YAML string is parsed
      */
-    private static function parseMapping($mapping, &$i = 0)
+    private static function parseMapping($mapping, &$i = 0, $objectForMap = false)
     {
         $output = array();
         $len = strlen($mapping);
@@ -338,6 +340,10 @@ class Inline
                     ++$i;
                     continue 2;
                 case '}':
+                    if (true === $objectForMap) {
+                        return (object) $output;
+                    }
+
                     return $output;
             }
 
@@ -350,12 +356,12 @@ class Inline
                 switch ($mapping[$i]) {
                     case '[':
                         // nested sequence
-                        $output[$key] = self::parseSequence($mapping, $i);
+                        $output[$key] = self::parseSequence($mapping, $i, $objectForMap);
                         $done = true;
                         break;
                     case '{':
                         // nested mapping
-                        $output[$key] = self::parseMapping($mapping, $i);
+                        $output[$key] = self::parseMapping($mapping, $i, $objectForMap);
                         $done = true;
                         break;
                     case ':':
